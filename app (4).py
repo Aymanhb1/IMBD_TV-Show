@@ -1,70 +1,40 @@
-%%writefile app.py
 import streamlit as st
 import tensorflow as tf
 from transformers import TFBertForSequenceClassification, BertTokenizer
 import os
 import gdown # Import gdown
+import zipfile # Import zipfile for extraction
 
 # Define the path where the model will be saved locally in the Streamlit environment
 LOCAL_SAVE_DIRECTORY = "./saved_sentiment_model"
+DOWNLOADED_ZIP_NAME = "saved_sentiment_model.zip"
 
-# Define the Google Drive File ID of your saved model (or a zipped archive of it)
-# You need to replace 'YOUR_GOOGLE_DRIVE_FILE_ID' with the actual ID from your shared link
-# Example ID from your previous link: '1l0JXajXq4bjf0bOgfQkrxJNwyuzzww-G' (if that's the model file)
-GOOGLE_DRIVE_FILE_ID = 'YOUR_GOOGLE_DRIVE_FILE_ID'
-
-# Define the local path to save the downloaded file
-# If you zipped the model directory, this should be the zip file name
-# If it's the .h5 file, use the .h5 file name
-DOWNLOADED_FILE_NAME = "tf_model.h5" # Or "saved_sentiment_model.zip" if you zipped
+# Define the Google Drive File ID of your zipped saved model directory
+# **!!! REPLACE THIS WITH YOUR ACTUAL GOOGLE DRIVE FILE ID !!!**
+GOOGLE_DRIVE_FILE_ID_OF_ZIP = 'YOUR_GOOGLE_DRIVE_FILE_ID_OF_ZIP'
 
 # --- Download the model from Google Drive if it doesn't exist locally ---
-if not os.path.exists(LOCAL_SAVE_DIRECTORY):
-    st.info(f"Downloading model from Google Drive...")
+if not os.path.exists(LOCAL_SAVE_DIRECTORY) or not os.listdir(LOCAL_SAVE_DIRECTORY):
+    st.info(f"Model directory '{LOCAL_SAVE_DIRECTORY}' not found or is empty. Downloading from Google Drive...")
     try:
-        # Ensure the directory for the downloaded file exists
-        # If you're downloading a zip, you might create LOCAL_SAVE_DIRECTORY later after unzipping
-        # If downloading an .h5 file directly into a folder structure, create parent dirs as needed
-        # For simplicity, let's assume you're downloading the .h5 file directly to the main app directory for now
-        # Or you might download a zip and unzip it. Let's refine this based on what was uploaded.
+        # Ensure gdown is installed (important for deployment environments)
+        # You should also include gdown in your requirements.txt
+        
+        # Download the zipped model file
+        gdown.download(f'https://drive.google.com/uc?id={GOOGLE_DRIVE_FILE_ID_OF_ZIP}', DOWNLOADED_ZIP_NAME, fuzzy=True, quiet=True)
+        
+        if os.path.exists(DOWNLOADED_ZIP_NAME):
+            # Unzip the downloaded file
+            st.info(f"Extracting model from {DOWNLOADED_ZIP_NAME}...")
+            with zipfile.ZipFile(DOWNLOADED_ZIP_NAME, 'r') as zip_ref:
+                zip_ref.extractall(".") # Extract to the current directory
+            st.success("Model downloaded and extracted successfully!")
+            # Clean up the downloaded zip file
+            os.remove(DOWNLOADED_ZIP_NAME)
+        else:
+             st.error(f"Failed to download model from Google Drive. File ID: {GOOGLE_DRIVE_FILE_ID_OF_ZIP}")
+             st.stop() # Stop the app if model cannot be loaded
 
-        # Assuming 'YOUR_GOOGLE_DRIVE_FILE_ID' is the ID of the 'tf_model.h5' file
-        # and you want to save it inside LOCAL_SAVE_DIRECTORY structure
-        # A better approach for the whole directory is to zip it and download the zip.
-
-        # Let's assume the user uploaded the whole 'saved_sentiment_model' directory as a zip
-        # If you uploaded the directory as a zip, replace GOOGLE_DRIVE_FILE_ID and DOWNLOADED_FILE_NAME accordingly
-        # And add unzip logic here.
-
-        # **Alternative (Simpler if you just uploaded the .h5 file):**
-        # If your GOOGLE_DRIVE_FILE_ID is for a single large file like tf_model.h5
-        # and your model loading logic expects this file structure, you might need to download
-        # the tokenizer files separately or save the whole model directory as a zip.
-
-        # Let's revert to downloading the directory as a zip as it's more likely for a full BERT model save.
-        # --- ASSUMPTION: The user zipped the 'saved_sentiment_model' directory and uploaded the zip to Drive ---
-        # If this assumption is wrong, we need to adjust the download and loading logic.
-        # Let's assume GOOGLE_DRIVE_FILE_ID is the ID of 'saved_sentiment_model.zip'
-        # And DOWNLOADED_FILE_NAME is 'saved_sentiment_model.zip'
-
-        # Adjusting variables based on zipping the directory:
-        # LOCAL_SAVE_DIRECTORY remains './saved_sentiment_model'
-        # DOWNLOADED_ZIP_NAME = "saved_sentiment_model.zip"
-        # GOOGLE_DRIVE_FILE_ID_OF_ZIP = 'YOUR_GOOGLE_DRIVE_ZIP_FILE_ID' # <-- You need this ID
-
-        # Let's assume the user wants to download the directory itself as a zip from the link provided earlier
-        # If the link '1l0JXajXq4bjf0bOgfQkrxJNwyuzzww-G' is actually the directory zipped:
-        GOOGLE_DRIVE_FILE_ID_OF_ZIP = '1l0JXajXq4bjf0bOgfQkrxJNwyuzzww-G' # Assuming this ID is for the zipped model
-        DOWNLOADED_ZIP_NAME = "saved_sentiment_model.zip"
-
-        gdown.download(f'https://drive.google.com/uc?id={GOOGLE_DRIVE_FILE_ID_OF_ZIP}', DOWNLOADED_ZIP_NAME, fuzzy=True)
-
-        # Unzip the downloaded file
-        import zipfile
-        with zipfile.ZipFile(DOWNLOADED_ZIP_NAME, 'r') as zip_ref:
-            zip_ref.extractall(".") # Extract to the current directory
-
-        st.success("Model downloaded and extracted successfully!")
     except Exception as e:
         st.error(f"Error downloading or extracting model: {e}")
         st.stop() # Stop the app if model cannot be loaded
@@ -82,6 +52,7 @@ def load_model_from_local(local_save_directory):
         return model, tokenizer
     except Exception as e:
         st.error(f"Error loading model or tokenizer from local directory: {e}")
+        st.info("Please ensure the model and tokenizer files are in the correct directory after extraction.")
         return None, None
 
 model, tokenizer = load_model_from_local(LOCAL_SAVE_DIRECTORY)
@@ -114,6 +85,9 @@ if st.button("Predict Sentiment"):
              stop_words = set(stopwords.words('english'))
              lemmatizer = WordNetLemmatizer()
         except nltk.downloader.DownloadError:
+             st.error("NLTK data not found. Please ensure 'stopwords', 'punkt', 'wordnet', and 'omw-1.4' are downloaded.")
+             st.stop()
+        except LookupError:
              st.error("NLTK data not found. Please ensure 'stopwords', 'punkt', 'wordnet', and 'omw-1.4' are downloaded.")
              st.stop()
 
